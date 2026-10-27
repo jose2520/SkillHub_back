@@ -1,0 +1,51 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{A1B2C3D4-1111-4000-8000-000000000001}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{A1B2C3D4-2222-4000-8000-000000000002}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SkillHub.Domain", "src\SkillHub.Domain\SkillHub.Domain.csproj", "{C8463A1F-5CFC-4B9E-B4A9-C0879DAA78E9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SkillHub.Application", "src\SkillHub.Application\SkillHub.Application.csproj", "{08D96CC3-BF38-46DC-A61E-82CEBFAD6BF3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SkillHub.Infrastructure", "src\SkillHub.Infrastructure\SkillHub.Infrastructure.csproj", "{1CAC19B1-C0EE-4394-A1B7-5AE84FE391A7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SkillHub.API", "src\SkillHub.API\SkillHub.API.csproj", "{8F6968B5-EF9F-4EA0-8626-8A80CA8A9764}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SkillHub.Tests", "tests\SkillHub.Tests\SkillHub.Tests.csproj", "{B685CA19-B2E5-48E0-B1D9-15CB4953E7F1}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C8463A1F-5CFC-4B9E-B4A9-C0879DAA78E9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C8463A1F-5CFC-4B9E-B4A9-C0879DAA78E9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C8463A1F-5CFC-4B9E-B4A9-C0879DAA78E9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C8463A1F-5CFC-4B9E-B4A9-C0879DAA78E9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{08D96CC3-BF38-46DC-A61E-82CEBFAD6BF3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{08D96CC3-BF38-46DC-A61E-82CEBFAD6BF3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{08D96CC3-BF38-46DC-A61E-82CEBFAD6BF3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{08D96CC3-BF38-46DC-A61E-82CEBFAD6BF3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1CAC19B1-C0EE-4394-A1B7-5AE84FE391A7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1CAC19B1-C0EE-4394-A1B7-5AE84FE391A7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1CAC19B1-C0EE-4394-A1B7-5AE84FE391A7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1CAC19B1-C0EE-4394-A1B7-5AE84FE391A7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8F6968B5-EF9F-4EA0-8626-8A80CA8A9764}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8F6968B5-EF9F-4EA0-8626-8A80CA8A9764}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8F6968B5-EF9F-4EA0-8626-8A80CA8A9764}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8F6968B5-EF9F-4EA0-8626-8A80CA8A9764}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B685CA19-B2E5-48E0-B1D9-15CB4953E7F1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B685CA19-B2E5-48E0-B1D9-15CB4953E7F1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B685CA19-B2E5-48E0-B1D9-15CB4953E7F1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B685CA19-B2E5-48E0-B1D9-15CB4953E7F1}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{C8463A1F-5CFC-4B9E-B4A9-C0879DAA78E9} = {A1B2C3D4-1111-4000-8000-000000000001}
+		{08D96CC3-BF38-46DC-A61E-82CEBFAD6BF3} = {A1B2C3D4-1111-4000-8000-000000000001}
+		{1CAC19B1-C0EE-4394-A1B7-5AE84FE391A7} = {A1B2C3D4-1111-4000-8000-000000000001}
+		{8F6968B5-EF9F-4EA0-8626-8A80CA8A9764} = {A1B2C3D4-1111-4000-8000-000000000001}
+		{B685CA19-B2E5-48E0-B1D9-15CB4953E7F1} = {A1B2C3D4-2222-4000-8000-000000000002}
+	EndGlobalSection
+EndGlobal
