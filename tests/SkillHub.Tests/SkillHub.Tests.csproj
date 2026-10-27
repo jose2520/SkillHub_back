@@ -12,6 +12,7 @@
         <ProjectReference Include="..\..\src\SkillHub.Domain\SkillHub.Domain.csproj" />
         <ProjectReference Include="..\..\src\SkillHub.Application\SkillHub.Application.csproj" />
         <ProjectReference Include="..\..\src\SkillHub.Infrastructure\SkillHub.Infrastructure.csproj" />
+        <ProjectReference Include="..\..\src\SkillHub.API\SkillHub.API.csproj" />
     </ItemGroup>
 
     <ItemGroup>

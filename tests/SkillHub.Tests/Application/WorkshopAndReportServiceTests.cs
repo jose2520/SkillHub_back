@@ -13,29 +13,52 @@ public sealed class WorkshopAndReportServiceTests
 {
     private static readonly DateTime FixedNowUtc = new(2026, 11, 1, 10, 0, 0, DateTimeKind.Utc);
 
+    private static WorkshopService CreateWorkshopService(
+        Mock<IWorkshopRepository> workshopRepo,
+        Mock<IInstructorRepository> instructorRepo,
+        Mock<IEnrollmentRepository>? enrollmentRepo = null,
+        Mock<IUnitOfWork>? uow = null)
+    {
+        var clock = new Mock<IDateTimeProvider>();
+        clock.Setup(c => c.UtcNow).Returns(FixedNowUtc);
+
+        return new WorkshopService(
+            workshopRepo.Object,
+            instructorRepo.Object,
+            (enrollmentRepo ?? new Mock<IEnrollmentRepository>()).Object,
+            (uow ?? new Mock<IUnitOfWork>()).Object,
+            clock.Object,
+            new CreateWorkshopRequestValidator());
+    }
+
+    [Fact]
+    public async Task CreateWorkshop_DuplicateCode_ThrowsConflictException()
+    {
+        var workshopRepo = new Mock<IWorkshopRepository>();
+        var instructorRepo = new Mock<IInstructorRepository>();
+        workshopRepo.Setup(r => r.ExistsByCodeAsync("FOT-001", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var sut = CreateWorkshopService(workshopRepo, instructorRepo);
+        var request = new CreateWorkshopRequestDto(
+            "fot-001", "Photo", "Desc", "andres.mejia@correo.com",
+            FixedNowUtc.AddDays(5), FixedNowUtc.AddDays(5).AddHours(3), 10);
+
+        await Assert.ThrowsAsync<ConflictException>(() => sut.CreateWorkshopAsync(request));
+    }
+
     [Fact]
     public async Task CreateWorkshop_UnknownInstructorEmail_ThrowsNotFoundException()
     {
         var workshopRepo = new Mock<IWorkshopRepository>();
         var instructorRepo = new Mock<IInstructorRepository>();
-        var enrollmentRepo = new Mock<IEnrollmentRepository>();
-        var uow = new Mock<IUnitOfWork>();
-        var clock = new Mock<IDateTimeProvider>();
-        clock.Setup(c => c.UtcNow).Returns(FixedNowUtc);
 
         workshopRepo.Setup(r => r.ExistsByCodeAsync("FOT-099", It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
         instructorRepo.Setup(r => r.GetByEmailAsync("unknown@correo.com", It.IsAny<CancellationToken>()))
             .ReturnsAsync((Instructor?)null);
 
-        var sut = new WorkshopService(
-            workshopRepo.Object,
-            instructorRepo.Object,
-            enrollmentRepo.Object,
-            uow.Object,
-            clock.Object,
-            new CreateWorkshopRequestValidator());
-
+        var sut = CreateWorkshopService(workshopRepo, instructorRepo);
         var request = new CreateWorkshopRequestDto(
             "FOT-099",
             "Studio Lighting",
@@ -46,6 +69,70 @@ public sealed class WorkshopAndReportServiceTests
             12);
 
         await Assert.ThrowsAsync<NotFoundException>(() => sut.CreateWorkshopAsync(request));
+    }
+
+    [Fact]
+    public async Task CreateWorkshop_ValidInput_PersistsAndReturnsFullAvailableSpots()
+    {
+        var workshopRepo = new Mock<IWorkshopRepository>();
+        var instructorRepo = new Mock<IInstructorRepository>();
+        var uow = new Mock<IUnitOfWork>();
+
+        var instructor = Instructor.Create("emp-1", "Andrés Mejía", "andres.mejia@correo.com", "Fotografía", FixedNowUtc);
+        workshopRepo.Setup(r => r.ExistsByCodeAsync("FOT-050", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        instructorRepo.Setup(r => r.GetByEmailAsync("andres.mejia@correo.com", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(instructor);
+
+        var sut = CreateWorkshopService(workshopRepo, instructorRepo, uow: uow);
+        var request = new CreateWorkshopRequestDto(
+            "fot-050", "Night Photo", "Long exposure", "andres.mejia@correo.com",
+            FixedNowUtc.AddDays(10), FixedNowUtc.AddDays(10).AddHours(4), 16);
+
+        var created = await sut.CreateWorkshopAsync(request);
+
+        Assert.Equal("FOT-050", created.Code);
+        Assert.Equal(16, created.Capacity);
+        Assert.Equal(0, created.ActiveEnrollments);
+        Assert.Equal(16, created.AvailableSpots);
+        Assert.Equal("Andrés Mejía", created.InstructorName);
+        uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetWorkshopById_And_GetWorkshopEnrollments_MissingId_ThrowsNotFoundException()
+    {
+        var workshopRepo = new Mock<IWorkshopRepository>();
+        var instructorRepo = new Mock<IInstructorRepository>();
+        var sut = CreateWorkshopService(workshopRepo, instructorRepo);
+
+        await Assert.ThrowsAsync<NotFoundException>(() => sut.GetWorkshopByIdAsync(Guid.NewGuid()));
+        await Assert.ThrowsAsync<NotFoundException>(() => sut.GetWorkshopEnrollmentsAsync(Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task GetUpcomingWorkshops_CalculatesAvailableSpotsExcludingCancelledEnrollments()
+    {
+        var workshopRepo = new Mock<IWorkshopRepository>();
+        var instructorRepo = new Mock<IInstructorRepository>();
+        var w = Workshop.CreateNew(
+            "ORA-001", "Public Speaking", "Confidence", Guid.NewGuid(),
+            FixedNowUtc.AddDays(4), FixedNowUtc.AddDays(4).AddHours(3), 20, FixedNowUtc);
+
+        var active = Enrollment.Create(Guid.NewGuid(), w.Id, FixedNowUtc);
+        var cancelled = Enrollment.Create(Guid.NewGuid(), w.Id, FixedNowUtc);
+        cancelled.Cancel("emp@correo.com", isEmployee: true, w.StartDateTime, FixedNowUtc);
+        AddEnrollmentsToWorkshop(w, active, cancelled);
+
+        workshopRepo.Setup(r => r.GetUpcomingWithDetailsAsync(FixedNowUtc, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { w });
+
+        var sut = CreateWorkshopService(workshopRepo, instructorRepo);
+        var list = await sut.GetUpcomingWorkshopsAsync();
+
+        Assert.Single(list);
+        Assert.Equal(1, list[0].ActiveEnrollments);
+        Assert.Equal(19, list[0].AvailableSpots);
     }
 
     [Fact]

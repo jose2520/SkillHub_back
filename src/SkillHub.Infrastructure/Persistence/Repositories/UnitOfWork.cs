@@ -1,3 +1,6 @@
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using SkillHub.Application.Exceptions;
 using SkillHub.Domain.Abstractions;
 using SkillHub.Domain.Common;
 
@@ -31,7 +34,15 @@ public sealed class UnitOfWork : IUnitOfWork
             entity.ClearDomainEvents();
         }
 
-        var result = await _context.SaveChangesAsync(cancellationToken);
+        int result;
+        try
+        {
+            result = await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            throw new ConflictException("A conflicting active record already exists for this resource.");
+        }
 
         if (domainEvents.Count > 0)
         {
@@ -39,5 +50,10 @@ public sealed class UnitOfWork : IUnitOfWork
         }
 
         return result;
+    }
+
+    public void ClearTrackedChanges()
+    {
+        _context.ChangeTracker.Clear();
     }
 }

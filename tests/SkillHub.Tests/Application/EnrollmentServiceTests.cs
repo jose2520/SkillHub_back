@@ -7,7 +7,6 @@ using SkillHub.Application.Services;
 using SkillHub.Application.Validators;
 using SkillHub.Domain.Abstractions;
 using SkillHub.Domain.Entities;
-using SkillHub.Domain.Enums;
 using SkillHub.Domain.Exceptions;
 
 namespace SkillHub.Tests.Application;
@@ -45,14 +44,8 @@ public sealed class EnrollmentServiceTests
     {
         var participant = Participant.Create("user-1", "Jorge Perez", "jorge.perez@correo.com", FixedNowUtc);
         var workshop = Workshop.CreateNew(
-            "FOT-001",
-            "Photography",
-            "Basics",
-            Guid.NewGuid(),
-            FixedNowUtc.AddDays(10),
-            FixedNowUtc.AddDays(10).AddHours(4),
-            15,
-            FixedNowUtc);
+            "FOT-001", "Photography", "Basics", Guid.NewGuid(),
+            FixedNowUtc.AddDays(10), FixedNowUtc.AddDays(10).AddHours(4), 15, FixedNowUtc);
 
         _participantRepo.Setup(r => r.GetByIdentityUserIdAsync("user-1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(participant);
@@ -68,24 +61,40 @@ public sealed class EnrollmentServiceTests
     }
 
     [Fact]
-    public async Task EnrollAuthenticatedParticipant_ReEnrollmentAfterCancellation_Succeeds()
+    public async Task EnrollAuthenticatedParticipant_FullCapacity_ThrowsCapacityExceededException()
     {
         var participant = Participant.Create("user-1", "Jorge Perez", "jorge.perez@correo.com", FixedNowUtc);
         var workshop = Workshop.CreateNew(
-            "FOT-001",
-            "Photography",
-            "Basics",
-            Guid.NewGuid(),
-            FixedNowUtc.AddDays(10),
-            FixedNowUtc.AddDays(10).AddHours(4),
-            15,
-            FixedNowUtc);
+            "FOT-001", "Photography", "Basics", Guid.NewGuid(),
+            FixedNowUtc.AddDays(10), FixedNowUtc.AddDays(10).AddHours(4), capacity: 2, FixedNowUtc);
 
         _participantRepo.Setup(r => r.GetByIdentityUserIdAsync("user-1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(participant);
         _workshopRepo.Setup(r => r.GetByIdWithDetailsAsync(workshop.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(workshop);
-        // Previous enrollment was cancelled, so HasActiveEnrollmentAsync is false
+        _enrollmentRepo.Setup(r => r.HasActiveEnrollmentAsync(participant.Id, workshop.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        _enrollmentRepo.Setup(r => r.CountActiveByWorkshopIdAsync(workshop.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(2);
+
+        var sut = CreateSut();
+
+        await Assert.ThrowsAsync<CapacityExceededException>(() =>
+            sut.EnrollAuthenticatedParticipantAsync("user-1", new CreateEnrollmentRequestDto(workshop.Id)));
+    }
+
+    [Fact]
+    public async Task EnrollAuthenticatedParticipant_ReEnrollmentAfterCancellation_Succeeds()
+    {
+        var participant = Participant.Create("user-1", "Jorge Perez", "jorge.perez@correo.com", FixedNowUtc);
+        var workshop = Workshop.CreateNew(
+            "FOT-001", "Photography", "Basics", Guid.NewGuid(),
+            FixedNowUtc.AddDays(10), FixedNowUtc.AddDays(10).AddHours(4), 15, FixedNowUtc);
+
+        _participantRepo.Setup(r => r.GetByIdentityUserIdAsync("user-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(participant);
+        _workshopRepo.Setup(r => r.GetByIdWithDetailsAsync(workshop.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(workshop);
         _enrollmentRepo.Setup(r => r.HasActiveEnrollmentAsync(participant.Id, workshop.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
         _enrollmentRepo.Setup(r => r.CountActiveByWorkshopIdAsync(workshop.Id, It.IsAny<CancellationToken>()))
@@ -106,24 +115,12 @@ public sealed class EnrollmentServiceTests
     {
         var participant = Participant.Create("user-1", "Jorge Perez", "jorge.perez@correo.com", FixedNowUtc);
         var existingWorkshop = Workshop.CreateNew(
-            "COC-001",
-            "Cooking",
-            "Coastal recipes",
-            Guid.NewGuid(),
-            FixedNowUtc.AddDays(5).AddHours(14),
-            FixedNowUtc.AddDays(5).AddHours(18),
-            12,
-            FixedNowUtc);
+            "COC-001", "Cooking", "Coastal recipes", Guid.NewGuid(),
+            FixedNowUtc.AddDays(5).AddHours(14), FixedNowUtc.AddDays(5).AddHours(18), 12, FixedNowUtc);
 
         var targetWorkshop = Workshop.CreateNew(
-            "DIS-001",
-            "Design",
-            "Canva graphics",
-            Guid.NewGuid(),
-            FixedNowUtc.AddDays(5).AddHours(16),
-            FixedNowUtc.AddDays(5).AddHours(19),
-            12,
-            FixedNowUtc);
+            "DIS-001", "Design", "Canva graphics", Guid.NewGuid(),
+            FixedNowUtc.AddDays(5).AddHours(16), FixedNowUtc.AddDays(5).AddHours(19), 12, FixedNowUtc);
 
         var activeEnrollment = Enrollment.Create(participant.Id, existingWorkshop.Id, FixedNowUtc);
         SetNavigationProperty(activeEnrollment, nameof(Enrollment.Workshop), existingWorkshop);
@@ -148,18 +145,45 @@ public sealed class EnrollmentServiceTests
     }
 
     [Fact]
+    public async Task EnrollAuthenticatedParticipant_BackToBackNonOverlappingWorkshop_Succeeds()
+    {
+        var participant = Participant.Create("user-1", "Jorge Perez", "jorge.perez@correo.com", FixedNowUtc);
+        var morningWorkshop = Workshop.CreateNew(
+            "FOT-001", "Morning Photo", "Light", Guid.NewGuid(),
+            FixedNowUtc.AddDays(5).AddHours(8), FixedNowUtc.AddDays(5).AddHours(12), 12, FixedNowUtc);
+
+        var afternoonWorkshop = Workshop.CreateNew(
+            "COC-001", "Afternoon Cooking", "Lunch", Guid.NewGuid(),
+            FixedNowUtc.AddDays(5).AddHours(12), FixedNowUtc.AddDays(5).AddHours(16), 12, FixedNowUtc);
+
+        var activeMorning = Enrollment.Create(participant.Id, morningWorkshop.Id, FixedNowUtc);
+        SetNavigationProperty(activeMorning, nameof(Enrollment.Workshop), morningWorkshop);
+
+        _participantRepo.Setup(r => r.GetByIdentityUserIdAsync("user-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(participant);
+        _workshopRepo.Setup(r => r.GetByIdWithDetailsAsync(afternoonWorkshop.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(afternoonWorkshop);
+        _enrollmentRepo.Setup(r => r.HasActiveEnrollmentAsync(participant.Id, afternoonWorkshop.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        _enrollmentRepo.Setup(r => r.CountActiveByWorkshopIdAsync(afternoonWorkshop.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(0);
+        _enrollmentRepo.Setup(r => r.GetActiveByParticipantIdWithWorkshopAsync(participant.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { activeMorning });
+
+        var sut = CreateSut();
+        var result = await sut.EnrollAuthenticatedParticipantAsync("user-1", new CreateEnrollmentRequestDto(afternoonWorkshop.Id));
+
+        Assert.Equal("Active", result.Status);
+        Assert.Equal("COC-001", result.WorkshopCode);
+    }
+
+    [Fact]
     public async Task CancelAndCertificate_AnotherParticipantEnrollment_ThrowsForbiddenAccessException()
     {
         var owner = Participant.Create("owner-user", "Owner User", "owner@correo.com", FixedNowUtc);
         var workshop = Workshop.CreateNew(
-            "ORA-001",
-            "Public Speaking",
-            "Confidence",
-            Guid.NewGuid(),
-            FixedNowUtc.AddDays(7),
-            FixedNowUtc.AddDays(7).AddHours(3),
-            20,
-            FixedNowUtc);
+            "ORA-001", "Public Speaking", "Confidence", Guid.NewGuid(),
+            FixedNowUtc.AddDays(7), FixedNowUtc.AddDays(7).AddHours(3), 20, FixedNowUtc);
 
         var enrollment = Enrollment.Create(owner.Id, workshop.Id, FixedNowUtc);
         SetNavigationProperty(enrollment, nameof(Enrollment.Participant), owner);
@@ -178,25 +202,52 @@ public sealed class EnrollmentServiceTests
     }
 
     [Fact]
-    public async Task ImportEnrollments_SavesValidRowsEvenWhenOtherRowsFail()
+    public async Task Employee_CanDownloadCertificateAndCancelAnyParticipantEnrollmentUnder24h()
+    {
+        var owner = Participant.Create("owner-user", "Owner User", "owner@correo.com", FixedNowUtc);
+        var workshop = Workshop.CreateNew(
+            "ORA-001", "Public Speaking", "Confidence", Guid.NewGuid(),
+            FixedNowUtc.AddHours(3), FixedNowUtc.AddHours(6), 20, FixedNowUtc);
+
+        var enrollment = Enrollment.Create(owner.Id, workshop.Id, FixedNowUtc);
+        SetNavigationProperty(enrollment, nameof(Enrollment.Participant), owner);
+        SetNavigationProperty(enrollment, nameof(Enrollment.Workshop), workshop);
+
+        _enrollmentRepo.Setup(r => r.GetByIdWithDetailsAsync(enrollment.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(enrollment);
+        _pdfService.Setup(p => p.GenerateEnrollmentCertificate(It.IsAny<CertificateDataDto>()))
+            .Returns([0x25, 0x50, 0x44, 0x46]);
+
+        var sut = CreateSut();
+
+        // 1. Employee downloads active certificate for another participant
+        var cert = await sut.GenerateCertificateAsync(enrollment.Id, "employee-user", isEmployee: true);
+        Assert.Equal("application/pdf", cert.ContentType);
+
+        // 2. Employee cancels enrollment only 3 hours before start (no 24h restriction)
+        var cancelled = await sut.CancelEnrollmentAsync(
+            enrollment.Id, "employee-user", "andres.mejia@correo.com", isEmployee: true);
+        Assert.Equal("Cancelled", cancelled.Status);
+        Assert.Equal("andres.mejia@correo.com", cancelled.CancelledBy);
+    }
+
+    [Fact]
+    public async Task ImportEnrollments_SavesValidRowsEvenWhenOtherRowsFail_AndClearsTrackerOnError()
     {
         var participant = Participant.Create("user-1", "Jorge Perez", "jorge.perez@correo.com", FixedNowUtc);
         var workshop = Workshop.CreateNew(
-            "FOT-001",
-            "Photography",
-            "Basics",
-            Guid.NewGuid(),
-            FixedNowUtc.AddDays(10),
-            FixedNowUtc.AddDays(10).AddHours(4),
-            capacity: 1,
-            currentUtc: FixedNowUtc);
+            "FOT-001", "Photography", "Basics", Guid.NewGuid(),
+            FixedNowUtc.AddDays(10), FixedNowUtc.AddDays(10).AddHours(4), capacity: 1, currentUtc: FixedNowUtc);
 
         var rows = new List<ExcelEnrollmentRowDto>
         {
-            new(2, "missing@correo.com", "FOT-001"),
-            new(3, "jorge.perez@correo.com", "UNKNOWN-999"),
-            new(4, "jorge.perez@correo.com", "FOT-001"), // Valid!
-            new(5, "jorge.perez@correo.com", "FOT-001")  // Duplicate!
+            new(2, "", "FOT-001"),                        // Empty email
+            new(3, "jorge.perez@correo.com", ""),         // Empty workshop code
+            new(4, "bad-email", "FOT-001"),               // Invalid email format
+            new(5, "missing@correo.com", "FOT-001"),      // Participant not found
+            new(6, "jorge.perez@correo.com", "NONE-999"), // Workshop not found
+            new(7, "jorge.perez@correo.com", "FOT-001"),  // Valid!
+            new(8, "jorge.perez@correo.com", "FOT-001")   // Duplicate!
         };
 
         _excelService.Setup(s => s.ParseEnrollmentRows(It.IsAny<Stream>())).Returns(rows);
@@ -221,9 +272,10 @@ public sealed class EnrollmentServiceTests
         var result = await sut.ImportEnrollmentsAsync(stream);
 
         Assert.Equal(1, result.EnrolledCount);
-        Assert.Equal(3, result.RejectedCount);
-        Assert.Equal(4, result.TotalProcessed);
-        Assert.Equal([2, 3, 5], result.RejectedRows.Select(r => r.RowNumber).ToArray());
+        Assert.Equal(6, result.RejectedCount);
+        Assert.Equal(7, result.TotalProcessed);
+        Assert.Equal([2, 3, 4, 5, 6, 8], result.RejectedRows.Select(r => r.RowNumber).ToArray());
+        _unitOfWork.Verify(u => u.ClearTrackedChanges(), Times.AtLeastOnce);
     }
 
     private static void SetNavigationProperty<TTarget, TValue>(TTarget target, string propertyName, TValue value)

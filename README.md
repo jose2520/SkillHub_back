@@ -1,10 +1,12 @@
 # SkillHub — Workshop & Enrollment Management API
 
-![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet&logoColor=white)
-![C# 13](https://img.shields.io/badge/C%23-13.0-239120?logo=csharp&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14%2B-336791?logo=postgresql&logoColor=white)
-![Clean Architecture](https://img.shields.io/badge/Architecture-Clean%20Architecture-00599E)
-![Tests](https://img.shields.io/badge/Tests-27%20Passing-brightgreen)
+[![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
+[![C# 13](https://img.shields.io/badge/C%23-13.0-239120?logo=csharp&logoColor=white)](https://learn.microsoft.com/dotnet/csharp/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14%2B-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Clean Architecture](https://img.shields.io/badge/Architecture-Clean%20Architecture-00599E)](https://dotnet.microsoft.com/)
+[![Tests](https://img.shields.io/badge/Tests-81%20Passing-brightgreen)](tests/SkillHub.Tests)
+[![Swagger](https://img.shields.io/badge/Swagger-OpenAPI%20v1-85EA2D?logo=swagger&logoColor=black)](http://localhost:5142/swagger)
+[![Scalar](https://img.shields.io/badge/Scalar-API%20Reference-111827?logo=scalar&logoColor=white)](http://localhost:5142/scalar/v1)
 
 ## 📖 Project Description
 
@@ -30,7 +32,7 @@ Previously, registrations were collected through forms and tracked manually in s
 | **PDF Generation** | iText 7 / 9 (`ICertificatePdfService` in Application, `CertificatePdfService` in Infrastructure) |
 | **Error Handling** | Centralized `GlobalExceptionHandler` (`IExceptionHandler` / RFC 7807 `ProblemDetails`) |
 | **API Documentation** | Swagger UI (`/swagger`) with JWT Bearer Authorize support & Scalar (`/scalar/v1`) |
-| **Automated Testing** | xUnit + Moq (`27` unit and integration tests) |
+| **Automated Testing** | xUnit + Moq (`81` unit and integration tests) |
 
 ---
 
@@ -157,12 +159,64 @@ All Employee (Instructor) accounts are automatically created and ready to log in
 | **Hernán Darío Quintero Gil** | `hernan.quintero@correo.com` | `Instructor2026*` | Música |
 | **Paola Andrea Vargas Mora** | `paola.vargas@correo.com` | `Instructor2026*` | Marketing digital |
 
-### Sample Seeded Participant Account (Role: `Participant`)
+### Sample Seeded Participant Accounts (Role: `Participant`)
 | Full Name | Email | Password |
 | :--- | :--- | :--- |
 | **Jorge Andrés Pérez Rojas** | `jorge.perez@correo.com` | `Skillhub2026*` |
+| **Luz Marina Ospina Ríos** | `luz.ospina@correo.com` | `Skillhub2026*` |
 
 *(Any visitor can also register a new Participant account at `POST /api/v1/auth/register`.)*
+
+---
+
+## 🧪 How to Authenticate & Test (Swagger UI / Scalar)
+
+### 1. Sign In (`POST /api/v1/auth/login`)
+Open `http://localhost:5142/swagger` (or `http://localhost:5142/scalar/v1`), expand **`POST /api/v1/auth/login`**, click **Try it out**, and send either an **Employee** or **Participant** payload:
+
+```json
+{
+  "email": "andres.mejia@correo.com",
+  "password": "Instructor2026*"
+}
+```
+
+Copy the `"token"` value returned in the `200 OK` JSON response.
+
+### 2. Authorize with JWT Bearer 🔒
+1. Click the **`Authorize`** button at the top-right of Swagger UI (or the Authentication panel in Scalar).
+2. Paste **only the raw JWT token** into the **Value** input *(do not prepend `Bearer `, Swagger adds it automatically)*.
+3. Click **Authorize** → **Close**. All protected endpoints will now include `Authorization: Bearer <token>`.
+
+### 3. Test Bulk Excel Import (`POST /api/v1/enrollments/import`)
+1. Authenticate with an **`Employee`** token (`andres.mejia@correo.com`).
+2. Expand **`POST /api/v1/enrollments/import`** → **Try it out**.
+3. Upload `src/SkillHub.Infrastructure/Resources/Data/SkillHub_Data.xlsx` (automatically targets the `Enrollments` worksheet) or any `.xlsx` workbook containing `ParticipantEmail` and `WorkshopCode` headers.
+4. Click **Execute**. Valid rows are persisted even when other rows fail, returning a detailed summary:
+   ```json
+   {
+     "enrolledCount": 70,
+     "rejectedCount": 0,
+     "totalProcessed": 70,
+     "rejectedRows": []
+   }
+   ```
+
+### 4. Test Role Permissions & PDF Certificate
+- Switch to a **`Participant`** token (`jorge.perez@correo.com` / `Skillhub2026*`) via **Authorize → Logout** to test `POST /api/v1/enrollments`, `GET /api/v1/enrollments/mine`, `PATCH /api/v1/enrollments/{id}/cancel`, and `GET /api/v1/enrollments/{id}/certificate` (downloads the official PDF `Constancia de inscripción`).
+- Ready-to-run local requests are also included in `src/SkillHub.API/SkillHub.API.http`.
+
+---
+
+## 📏 Domain Business Rules (Enforced Outside Controllers)
+
+All business invariants live in `SkillHub.Domain` and `SkillHub.Application`:
+1. **Capacity Control:** Never exceeds `Workshop.Capacity`; only `Active` enrollments count toward occupied spots.
+2. **No Duplicate Active Enrollments:** Prevented in domain/application logic and backed by a PostgreSQL partial unique index (`WHERE "Status" = 'Active'`).
+3. **No Schedule Overlaps:** A participant cannot enroll in a workshop whose `TimeSlot` overlaps any of their existing `Active` enrollments.
+4. **Future Workshops Only:** Workshops can only be created with future `StartDateTime` (`EndDateTime > StartDateTime`), and enrollment is blocked once a workshop has started.
+5. **Cancellation & Audit Trail:** Participants can cancel up to **24 hours** before workshop start; Employees can cancel **anytime before start**. Every cancellation frees the spot and records `CancelledBy` and `CancelledAt`.
+6. **Re-Enrollment Allowed:** Participants who previously cancelled an enrollment can re-enroll in the same workshop as long as spots remain and all rules pass.
 
 ---
 

@@ -185,6 +185,16 @@ public sealed class EnrollmentService : IEnrollmentService
             }
             catch (DomainException ex)
             {
+                _unitOfWork.ClearTrackedChanges();
+                rejectedRows.Add(new RejectedImportRowDto(
+                    row.RowNumber,
+                    row.ParticipantEmail,
+                    row.WorkshopCode,
+                    ex.Message));
+            }
+            catch (ConflictException ex)
+            {
+                _unitOfWork.ClearTrackedChanges();
                 rejectedRows.Add(new RejectedImportRowDto(
                     row.RowNumber,
                     row.ParticipantEmail,
