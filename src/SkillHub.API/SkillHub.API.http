@@ -1,6 +1,90 @@
-@SkillHub.API_HostAddress = http://localhost:5142
+@SkillHub_HostAddress = http://localhost:5142
+@EmployeeToken = PASTE_EMPLOYEE_JWT_HERE
+@ParticipantToken = PASTE_PARTICIPANT_JWT_HERE
+@WorkshopId = 00000000-0000-0000-0000-000000000000
+@EnrollmentId = 00000000-0000-0000-0000-000000000000
 
-GET {{SkillHub.API_HostAddress}}/weatherforecast/
+### 1. Public - List upcoming workshops with available spots
+GET {{SkillHub_HostAddress}}/api/v1/workshops
 Accept: application/json
 
-###
+### 2. Public - Get workshop detail by ID
+GET {{SkillHub_HostAddress}}/api/v1/workshops/{{WorkshopId}}
+Accept: application/json
+
+### 3. Public - Register new participant
+POST {{SkillHub_HostAddress}}/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "fullName": "Camila Test User",
+  "email": "camila.test@correo.com",
+  "password": "Participant2026*"
+}
+
+### 4. Public - Login as Employee (Seeded Instructor)
+POST {{SkillHub_HostAddress}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "andres.mejia@correo.com",
+  "password": "Instructor2026*"
+}
+
+### 5. Public - Login as Participant (Seeded Participant)
+POST {{SkillHub_HostAddress}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "jorge.perez@correo.com",
+  "password": "Skillhub2026*"
+}
+
+### 6. Employee - Create a new future workshop
+POST {{SkillHub_HostAddress}}/api/v1/workshops
+Authorization: Bearer {{EmployeeToken}}
+Content-Type: application/json
+
+{
+  "code": "FOT-010",
+  "title": "Night Street Photography",
+  "description": "Long exposure and urban lighting techniques",
+  "instructorEmail": "andres.mejia@correo.com",
+  "startDateTime": "2027-03-15T18:00:00Z",
+  "endDateTime": "2027-03-15T21:00:00Z",
+  "capacity": 12
+}
+
+### 7. Employee - List enrollments of a workshop
+GET {{SkillHub_HostAddress}}/api/v1/workshops/{{WorkshopId}}/enrollments
+Authorization: Bearer {{EmployeeToken}}
+Accept: application/json
+
+### 8. Participant - Enroll in a workshop
+POST {{SkillHub_HostAddress}}/api/v1/enrollments
+Authorization: Bearer {{ParticipantToken}}
+Content-Type: application/json
+
+{
+  "workshopId": "{{WorkshopId}}"
+}
+
+### 9. Participant - List own enrollments
+GET {{SkillHub_HostAddress}}/api/v1/enrollments/mine
+Authorization: Bearer {{ParticipantToken}}
+Accept: application/json
+
+### 10. Participant or Employee - Cancel an enrollment
+PATCH {{SkillHub_HostAddress}}/api/v1/enrollments/{{EnrollmentId}}/cancel
+Authorization: Bearer {{ParticipantToken}}
+Accept: application/json
+
+### 11. Participant or Employee - Download PDF enrollment certificate
+GET {{SkillHub_HostAddress}}/api/v1/enrollments/{{EnrollmentId}}/certificate
+Authorization: Bearer {{ParticipantToken}}
+Accept: application/pdf
+
+### 12. Employee - Report of workshops ordered by active enrollments
+GET {{SkillHub_HostAddress}}/api/v1/reports/top-workshops
+Authorization: Bearer {{EmployeeToken}}
+Accept: application/json
