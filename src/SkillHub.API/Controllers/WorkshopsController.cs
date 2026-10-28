@@ -17,7 +17,11 @@ public sealed class WorkshopsController : ControllerBase
         _workshopService = workshopService;
     }
 
-    [HttpGet]
+    /// <summary>
+    /// 03. List upcoming workshops with available spots [Public]
+    /// </summary>
+    /// <remarks>Lists future workshops that have not started yet along with their calculated available spots.</remarks>
+    [HttpGet(Name = "03_GetUpcomingWorkshops")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(IReadOnlyList<WorkshopResponseDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<WorkshopResponseDto>>> GetUpcomingWorkshops(
@@ -27,9 +31,14 @@ public sealed class WorkshopsController : ControllerBase
         return Ok(workshops);
     }
 
-    [HttpGet("{id:guid}")]
+    /// <summary>
+    /// 04. Get workshop detail with available spots [Public]
+    /// </summary>
+    /// <remarks>Returns the details of a single workshop along with its calculated available spots.</remarks>
+    [HttpGet("{id}", Name = "04_GetWorkshopById")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(WorkshopResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<WorkshopResponseDto>> GetWorkshopById(
         Guid id,
@@ -39,7 +48,11 @@ public sealed class WorkshopsController : ControllerBase
         return Ok(workshop);
     }
 
-    [HttpPost]
+    /// <summary>
+    /// 05. Create a future workshop [Employee]
+    /// </summary>
+    /// <remarks>Publishes a new future workshop linked to a registered instructor by email.</remarks>
+    [HttpPost(Name = "05_CreateWorkshop")]
     [Authorize(Roles = RoleNames.Employee)]
     [ProducesResponseType(typeof(WorkshopResponseDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -55,9 +68,14 @@ public sealed class WorkshopsController : ControllerBase
         return CreatedAtAction(nameof(GetWorkshopById), new { id = created.Id }, created);
     }
 
-    [HttpGet("{id:guid}/enrollments")]
+    /// <summary>
+    /// 06. List enrollments of a workshop [Employee]
+    /// </summary>
+    /// <remarks>Lists all participants enrolled in the specified workshop.</remarks>
+    [HttpGet("{id}/enrollments", Name = "06_GetWorkshopEnrollments")]
     [Authorize(Roles = RoleNames.Employee)]
     [ProducesResponseType(typeof(IReadOnlyList<EnrollmentResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

@@ -21,6 +21,7 @@ public sealed class AuthService : IAuthService
     private readonly IUnitOfWork _unitOfWork;
     private readonly AppDbContext _dbContext;
     private readonly IJwtTokenService _jwtTokenService;
+    private readonly IEmailService _emailService;
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly IValidator<RegisterRequestDto> _registerValidator;
     private readonly IValidator<LoginRequestDto> _loginValidator;
@@ -32,6 +33,7 @@ public sealed class AuthService : IAuthService
         IUnitOfWork unitOfWork,
         AppDbContext dbContext,
         IJwtTokenService jwtTokenService,
+        IEmailService emailService,
         IDateTimeProvider dateTimeProvider,
         IValidator<RegisterRequestDto> registerValidator,
         IValidator<LoginRequestDto> loginValidator)
@@ -42,6 +44,7 @@ public sealed class AuthService : IAuthService
         _unitOfWork = unitOfWork;
         _dbContext = dbContext;
         _jwtTokenService = jwtTokenService;
+        _emailService = emailService;
         _dateTimeProvider = dateTimeProvider;
         _registerValidator = registerValidator;
         _loginValidator = loginValidator;
@@ -107,6 +110,11 @@ public sealed class AuthService : IAuthService
         {
             await transaction.CommitAsync(cancellationToken);
         }
+
+        await _emailService.SendWelcomeEmailAsync(
+            participant.Email,
+            participant.FullName,
+            cancellationToken);
 
         var (token, expiresAtUtc) = _jwtTokenService.GenerateToken(
             identityUser.Id,

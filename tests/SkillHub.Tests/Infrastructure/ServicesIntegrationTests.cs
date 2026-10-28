@@ -142,6 +142,105 @@ public sealed class ServicesIntegrationTests
         Assert.Contains("2026-12-05 14:00 - 2026-12-05 18:00 UTC", extractedText);
         Assert.Contains("2026-10-27 15:00:00 UTC", extractedText);
         Assert.Contains("2026-10-27 16:00:00 UTC", extractedText);
+
+        // Verify watermark and embedded brand assets exist in page XObjects
+        var xObjects = (PdfDictionary)pdfDoc.GetFirstPage().GetResources().GetResource(PdfName.XObject);
+        Assert.NotNull(xObjects);
+        Assert.True(xObjects.Size() >= 3, "Expected watermark, logo and QR xobjects in page resources");
+    }
+
+    [Fact]
+    public void ExcelReportService_GeneratesBrandedEnrollmentTemplate_WithLogoAndRoundTripsImport()
+    {
+        var sut = new ExcelReportService();
+        var catalog = new List<WorkshopResponseDto>
+        {
+            new(
+                Id: Guid.NewGuid(),
+                Code: "COC-001",
+                Title: "Cocina costeña",
+                Description: "Traditional coastal recipes",
+                InstructorId: Guid.NewGuid(),
+                InstructorName: "Rosa Elena Barrios Polo",
+                InstructorEmail: "rosa.barrios@correo.com",
+                InstructorSpecialty: "Culinary Arts",
+                StartDateTime: new DateTime(2026, 12, 5, 14, 0, 0, DateTimeKind.Utc),
+                EndDateTime: new DateTime(2026, 12, 5, 18, 0, 0, DateTimeKind.Utc),
+                Capacity: 12,
+                ActiveEnrollments: 7,
+                AvailableSpots: 5)
+        };
+
+        var nowUtc = new DateTime(2026, 10, 27, 18, 0, 0, DateTimeKind.Utc);
+        var bytes = sut.GenerateEnrollmentImportTemplate(catalog, nowUtc);
+        Assert.NotNull(bytes);
+
+        using var ms = new MemoryStream(bytes);
+        using var package = new ExcelPackage(ms);
+
+        Assert.Equal(2, package.Workbook.Worksheets.Count);
+        var enrollmentsSheet = package.Workbook.Worksheets["Enrollments"];
+        var catalogSheet = package.Workbook.Worksheets["Available Workshops"];
+
+        Assert.NotNull(enrollmentsSheet);
+        Assert.NotNull(catalogSheet);
+        Assert.True(enrollmentsSheet.Drawings.Count >= 1, "SkillHub logo should be embedded on the template sheet");
+
+        // Roundtrip: template sample rows parse through ExcelImportService
+        ms.Position = 0;
+        var importService = new ExcelImportService();
+        var rows = importService.ParseEnrollmentRows(ms);
+        Assert.True(rows.Count >= 2, "Template sample rows should be parsed correctly");
+        Assert.Equal("jorge.perez@correo.com", rows[0].ParticipantEmail);
+        Assert.Equal("COC-001", rows[0].WorkshopCode);
+    }
+
+    [Fact]
+    public void ExcelReportService_GeneratesTopWorkshopsWorkbook_WithExecutiveDashboardAndLogo()
+    {
+        var sut = new ExcelReportService();
+        var reportData = new List<TopWorkshopReportDto>
+        {
+            new(
+                WorkshopId: Guid.NewGuid(),
+                Code: "COC-001",
+                Title: "Cocina costeña",
+                InstructorName: "Rosa Elena Barrios Polo",
+                InstructorEmail: "rosa.barrios@correo.com",
+                StartDateTime: new DateTime(2026, 12, 5, 14, 0, 0, DateTimeKind.Utc),
+                EndDateTime: new DateTime(2026, 12, 5, 18, 0, 0, DateTimeKind.Utc),
+                Capacity: 12,
+                ActiveEnrollments: 10,
+                AvailableSpots: 2),
+            new(
+                WorkshopId: Guid.NewGuid(),
+                Code: "FOT-001",
+                Title: "Fotografía urbana",
+                InstructorName: "Andrés Felipe Mejía",
+                InstructorEmail: "andres.mejia@correo.com",
+                StartDateTime: new DateTime(2026, 12, 6, 9, 0, 0, DateTimeKind.Utc),
+                EndDateTime: new DateTime(2026, 12, 6, 13, 0, 0, DateTimeKind.Utc),
+                Capacity: 15,
+                ActiveEnrollments: 5,
+                AvailableSpots: 10)
+        };
+
+        var nowUtc = new DateTime(2026, 10, 27, 18, 0, 0, DateTimeKind.Utc);
+        var bytes = sut.GenerateTopWorkshopsExcelReport(reportData, nowUtc);
+        Assert.NotNull(bytes);
+
+        using var ms = new MemoryStream(bytes);
+        using var package = new ExcelPackage(ms);
+
+        Assert.Equal(2, package.Workbook.Worksheets.Count);
+        var topSheet = package.Workbook.Worksheets["Top Workshops"];
+        var dashSheet = package.Workbook.Worksheets["Executive Summary"];
+
+        Assert.NotNull(topSheet);
+        Assert.NotNull(dashSheet);
+        Assert.True(topSheet.Drawings.Count >= 1, "Logo should be embedded on top workshops report sheet");
+        Assert.Equal("COC-001", topSheet.Cells[5, 2].Value);
+        Assert.NotNull(topSheet.Cells[5, 11].Value);
     }
 
     [Fact]

@@ -29,11 +29,17 @@ public sealed record RejectedImportRowDto(
     string WorkshopCode,
     string Reason);
 
+public sealed record ApprovedImportRowDto(
+    int RowNumber,
+    string ParticipantEmail,
+    string WorkshopCode);
+
 public sealed record BulkImportResultDto(
     int EnrolledCount,
     int RejectedCount,
     int TotalProcessed,
-    IReadOnlyList<RejectedImportRowDto> RejectedRows);
+    IReadOnlyList<RejectedImportRowDto> RejectedRows,
+    IReadOnlyList<ApprovedImportRowDto>? ApprovedRows = null);
 
 public sealed record CertificateDataDto(
     Guid EnrollmentId,

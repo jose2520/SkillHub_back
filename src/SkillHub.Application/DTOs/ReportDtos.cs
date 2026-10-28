@@ -11,3 +11,8 @@ public sealed record TopWorkshopReportDto(
     int Capacity,
     int ActiveEnrollments,
     int AvailableSpots);
+
+public sealed record ExcelFileDto(
+    byte[] Content,
+    string FileName,
+    string ContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");

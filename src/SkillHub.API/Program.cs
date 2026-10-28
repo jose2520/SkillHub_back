@@ -1,10 +1,12 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Scalar.AspNetCore;
 using SkillHub.API.Middleware;
+using SkillHub.API.OpenApi;
 using SkillHub.Application;
 using SkillHub.Infrastructure;
 using SkillHub.Infrastructure.Persistence.Seeders;
@@ -19,8 +21,42 @@ builder.Services.AddInfrastructureServices(builder.Configuration);
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
 
-// 3. REST Controllers
-builder.Services.AddControllers();
+// 3. REST Controllers with Unified JSON Validation Error Responses
+builder.Services.AddControllers()
+    .ConfigureApiBehaviorOptions(options =>
+    {
+        options.InvalidModelStateResponseFactory = context =>
+        {
+            var errors = context.ModelState
+                .Where(entry => entry.Value?.Errors.Count > 0)
+                .ToDictionary(
+                    entry => string.IsNullOrWhiteSpace(entry.Key) ? "request" : entry.Key,
+                    entry => entry.Value!.Errors
+                        .Select(err => string.IsNullOrWhiteSpace(err.ErrorMessage)
+                            ? "The provided value is invalid."
+                            : err.ErrorMessage)
+                        .ToArray());
+
+            var payload = new
+            {
+                type = "https://httpstatuses.com/400",
+                title = "Validation Error",
+                status = StatusCodes.Status400BadRequest,
+                code = "Validation.Failed",
+                message = "One or more request parameters or JSON fields are invalid.",
+                detail = "One or more request parameters or JSON fields are invalid.",
+                instance = context.HttpContext.Request.Path.Value,
+                traceId = context.HttpContext.TraceIdentifier,
+                errors,
+                timestamp = DateTime.UtcNow
+            };
+
+            return new BadRequestObjectResult(payload)
+            {
+                ContentTypes = { "application/problem+json" }
+            };
+        };
+    });
 
 // 4. Explicit CORS Whitelist for Frontend Clients
 var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>()
@@ -125,6 +161,18 @@ builder.Services.AddSwaggerGen(options =>
         Description = "Clean Architecture REST API for SkillHub workshop catalog, enrollment rules, Excel bulk import, and PDF enrollment certificates."
     });
 
+    options.OrderActionsBy(apiDesc =>
+        apiDesc.ActionDescriptor.AttributeRouteInfo?.Name ?? apiDesc.RelativePath ?? string.Empty);
+    options.DocumentFilter<OpenApiDocumentOrderFilter>();
+    options.SchemaFilter<OpenApiRequestExamplesFilter>();
+
+    var xmlFilename = $"{typeof(Program).Assembly.GetName().Name}.xml";
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFilename);
+    if (File.Exists(xmlPath))
+    {
+        options.IncludeXmlComments(xmlPath);
+    }
+
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -161,7 +209,37 @@ app.UseSwaggerUI(c =>
 {
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "SkillHub API v1");
     c.RoutePrefix = "swagger";
+    c.EnablePersistAuthorization();
+    c.InjectJavascript("/swagger/swagger-order.js");
 });
+
+app.MapGet("/swagger/swagger-order.js", () => Results.Content(
+    """
+    (function () {
+      var originalOnLoad = window.onload;
+      window.onload = function () {
+        var originalBundle = window.SwaggerUIBundle;
+        if (originalBundle) {
+          var wrappedBundle = function (cfg) {
+            cfg.operationsSorter = function (a, b) {
+              var idA = (a.get("operation") && a.get("operation").get("operationId")) || "";
+              var idB = (b.get("operation") && b.get("operation").get("operationId")) || "";
+              return idA.localeCompare(idB);
+            };
+            return originalBundle(cfg);
+          };
+          Object.assign(wrappedBundle, originalBundle);
+          window.SwaggerUIBundle = wrappedBundle;
+        }
+        if (originalOnLoad) {
+          originalOnLoad();
+        }
+      };
+    })();
+    """,
+    "application/javascript; charset=utf-8"))
+    .AllowAnonymous()
+    .ExcludeFromDescription();
 
 app.MapScalarApiReference(options =>
 {
@@ -170,7 +248,7 @@ app.MapScalarApiReference(options =>
     options.WithTheme(ScalarTheme.Moon);
 });
 
-if (!app.Environment.IsDevelopment())
+if (!app.Environment.IsDevelopment() && builder.Configuration.GetValue("EnableHttpsRedirection", false))
 {
     app.UseHsts();
     app.UseHttpsRedirection();
@@ -193,7 +271,9 @@ app.MapGet("/", () => Results.Ok(new
         scalar = "/scalar/v1"
     },
     timestamp = DateTime.UtcNow
-})).AllowAnonymous();
+}))
+.AllowAnonymous()
+.ExcludeFromDescription();
 
 app.MapControllers();
 

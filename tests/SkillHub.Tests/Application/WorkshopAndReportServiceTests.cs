@@ -2,6 +2,7 @@ using System.Reflection;
 using Moq;
 using SkillHub.Application.DTOs;
 using SkillHub.Application.Exceptions;
+using SkillHub.Application.Interfaces;
 using SkillHub.Application.Services;
 using SkillHub.Application.Validators;
 using SkillHub.Domain.Abstractions;
@@ -163,7 +164,11 @@ public sealed class WorkshopAndReportServiceTests
         workshopRepo.Setup(r => r.GetAllWithDetailsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { w1, w2 });
 
-        var sut = new ReportService(workshopRepo.Object);
+        var excelReportService = new Mock<IExcelReportService>();
+        var dateTimeProvider = new Mock<IDateTimeProvider>();
+        dateTimeProvider.Setup(d => d.UtcNow).Returns(FixedNowUtc);
+
+        var sut = new ReportService(workshopRepo.Object, excelReportService.Object, dateTimeProvider.Object);
         var report = await sut.GetTopWorkshopsAsync();
 
         Assert.Equal(2, report.Count);
@@ -172,6 +177,61 @@ public sealed class WorkshopAndReportServiceTests
         Assert.Equal("FOT-001", report[1].Code);
         Assert.Equal(1, report[1].ActiveEnrollments);
         Assert.Equal(9, report[1].AvailableSpots);
+    }
+
+    [Fact]
+    public async Task ReportService_ExportTopWorkshopsExcelAsync_DelegatesToExcelServiceWithSortedWorkshops()
+    {
+        var w1 = Workshop.CreateNew(
+            "COC-001", "Pastry Art", "Desserts", Guid.NewGuid(),
+            FixedNowUtc.AddDays(2), FixedNowUtc.AddDays(2).AddHours(4), 10, FixedNowUtc);
+        AddEnrollmentsToWorkshop(w1, Enrollment.Create(Guid.NewGuid(), w1.Id, FixedNowUtc));
+
+        var workshopRepo = new Mock<IWorkshopRepository>();
+        workshopRepo.Setup(r => r.GetAllWithDetailsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Workshop> { w1 });
+
+        var expectedBytes = new byte[] { 0x50, 0x4B, 0x03, 0x04 };
+        var excelReportService = new Mock<IExcelReportService>();
+        excelReportService.Setup(e => e.GenerateTopWorkshopsExcelReport(It.IsAny<IReadOnlyList<TopWorkshopReportDto>>(), It.IsAny<DateTime>()))
+            .Returns(expectedBytes);
+
+        var dateTimeProvider = new Mock<IDateTimeProvider>();
+        dateTimeProvider.Setup(d => d.UtcNow).Returns(FixedNowUtc);
+
+        var sut = new ReportService(workshopRepo.Object, excelReportService.Object, dateTimeProvider.Object);
+        var result = await sut.ExportTopWorkshopsExcelAsync();
+
+        Assert.Equal("SkillHub_TopWorkshops_20261101_1000.xlsx", result.FileName);
+        Assert.Equal(expectedBytes, result.Content);
+        excelReportService.Verify(e => e.GenerateTopWorkshopsExcelReport(It.Is<IReadOnlyList<TopWorkshopReportDto>>(list => list.Count == 1), FixedNowUtc), Times.Once);
+    }
+
+    [Fact]
+    public async Task ReportService_GenerateEnrollmentTemplateExcelAsync_DelegatesToExcelServiceWithCatalog()
+    {
+        var w1 = Workshop.CreateNew(
+            "COC-001", "Pastry Art", "Desserts", Guid.NewGuid(),
+            FixedNowUtc.AddDays(2), FixedNowUtc.AddDays(2).AddHours(4), 10, FixedNowUtc);
+
+        var workshopRepo = new Mock<IWorkshopRepository>();
+        workshopRepo.Setup(r => r.GetUpcomingWithDetailsAsync(FixedNowUtc, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Workshop> { w1 });
+
+        var expectedBytes = new byte[] { 0x50, 0x4B, 0x03, 0x04 };
+        var excelReportService = new Mock<IExcelReportService>();
+        excelReportService.Setup(e => e.GenerateEnrollmentImportTemplate(It.IsAny<IReadOnlyList<WorkshopResponseDto>>(), It.IsAny<DateTime>()))
+            .Returns(expectedBytes);
+
+        var dateTimeProvider = new Mock<IDateTimeProvider>();
+        dateTimeProvider.Setup(d => d.UtcNow).Returns(FixedNowUtc);
+
+        var sut = new ReportService(workshopRepo.Object, excelReportService.Object, dateTimeProvider.Object);
+        var result = await sut.GenerateEnrollmentTemplateExcelAsync();
+
+        Assert.Equal("SkillHub_Enrollments_Template.xlsx", result.FileName);
+        Assert.Equal(expectedBytes, result.Content);
+        excelReportService.Verify(e => e.GenerateEnrollmentImportTemplate(It.Is<IReadOnlyList<WorkshopResponseDto>>(list => list.Count == 1), FixedNowUtc), Times.Once);
     }
 
     private static void AddEnrollmentsToWorkshop(Workshop workshop, params Enrollment[] enrollments)

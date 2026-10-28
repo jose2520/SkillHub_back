@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SkillHub.Application.Interfaces;
 using SkillHub.Domain.Abstractions;
+using SkillHub.Infrastructure.Configuration;
 using SkillHub.Infrastructure.Persistence;
 using SkillHub.Infrastructure.Persistence.Repositories;
 using SkillHub.Infrastructure.Persistence.Seeders;
@@ -60,7 +61,10 @@ public static class DependencyInjection
 
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IAuthService, AuthService>();
+        services.Configure<SmtpSettings>(configuration.GetSection(SmtpSettings.SectionName));
+        services.AddScoped<IEmailService, SmtpEmailService>();
         services.AddScoped<IExcelImportService, ExcelImportService>();
+        services.AddScoped<IExcelReportService, ExcelReportService>();
         services.AddScoped<ICertificatePdfService, CertificatePdfService>();
 
         return services;

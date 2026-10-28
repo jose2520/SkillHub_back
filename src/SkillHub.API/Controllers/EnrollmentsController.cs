@@ -14,13 +14,21 @@ public sealed class EnrollmentsController : ControllerBase
 {
     private const long MaxExcelFileSizeBytes = 10 * 1024 * 1024; // 10 MB
     private readonly IEnrollmentService _enrollmentService;
+    private readonly IReportService _reportService;
 
-    public EnrollmentsController(IEnrollmentService enrollmentService)
+    public EnrollmentsController(
+        IEnrollmentService enrollmentService,
+        IReportService reportService)
     {
         _enrollmentService = enrollmentService;
+        _reportService = reportService;
     }
 
-    [HttpPost]
+    /// <summary>
+    /// 07. Enroll authenticated participant in a workshop [Participant]
+    /// </summary>
+    /// <remarks>Enrolls the authenticated participant enforcing capacity, duplicate, future date, and schedule conflict rules.</remarks>
+    [HttpPost(Name = "07_CreateEnrollment")]
     [Authorize(Roles = RoleNames.Participant)]
     [ProducesResponseType(typeof(EnrollmentResponseDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -41,7 +49,11 @@ public sealed class EnrollmentsController : ControllerBase
         return StatusCode(StatusCodes.Status201Created, enrollment);
     }
 
-    [HttpGet("mine")]
+    /// <summary>
+    /// 08. List authenticated participant's own enrollments [Participant]
+    /// </summary>
+    /// <remarks>Returns exclusively the enrollments belonging to the currently authenticated participant.</remarks>
+    [HttpGet("mine", Name = "08_GetMyEnrollments")]
     [Authorize(Roles = RoleNames.Participant)]
     [ProducesResponseType(typeof(IReadOnlyList<EnrollmentResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -54,9 +66,14 @@ public sealed class EnrollmentsController : ControllerBase
         return Ok(enrollments);
     }
 
-    [HttpPatch("{id:guid}/cancel")]
+    /// <summary>
+    /// 09. Cancel an enrollment [Owner or Employee]
+    /// </summary>
+    /// <remarks>Participants can cancel up to 24 hours before workshop start; Employees can cancel anytime before start.</remarks>
+    [HttpPatch("{id}/cancel", Name = "09_CancelEnrollment")]
     [Authorize(Roles = $"{RoleNames.Participant},{RoleNames.Employee}")]
     [ProducesResponseType(typeof(EnrollmentResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -79,7 +96,11 @@ public sealed class EnrollmentsController : ControllerBase
         return Ok(updated);
     }
 
-    [HttpPost("import")]
+    /// <summary>
+    /// 10. Bulk import enrollments from Excel (.xlsx) [Employee]
+    /// </summary>
+    /// <remarks>Processes the Enrollments worksheet row by row, persisting valid rows even when others fail.</remarks>
+    [HttpPost("import", Name = "10_ImportEnrollments")]
     [Authorize(Roles = RoleNames.Employee)]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(MaxExcelFileSizeBytes)]
@@ -102,9 +123,29 @@ public sealed class EnrollmentsController : ControllerBase
         return Ok(result);
     }
 
-    [HttpGet("{id:guid}/certificate")]
+    /// <summary>
+    /// 10b. Download branded Excel (.xlsx) import template [Employee]
+    /// </summary>
+    /// <remarks>Downloads an official SkillHub-branded Excel workbook template with logo and live workshop code reference.</remarks>
+    [HttpGet("import/template", Name = "10b_DownloadEnrollmentTemplate")]
+    [Authorize(Roles = RoleNames.Employee)]
+    [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> DownloadImportTemplate(CancellationToken cancellationToken)
+    {
+        var excel = await _reportService.GenerateEnrollmentTemplateExcelAsync(cancellationToken);
+        return File(excel.Content, excel.ContentType, excel.FileName);
+    }
+
+    /// <summary>
+    /// 11. Download enrollment certificate in PDF [Owner or Employee]
+    /// </summary>
+    /// <remarks>Generates an official PDF certificate ('Constancia de inscripción') for active enrollments only.</remarks>
+    [HttpGet("{id}/certificate", Name = "11_DownloadCertificate")]
     [Authorize(Roles = $"{RoleNames.Participant},{RoleNames.Employee}")]
     [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

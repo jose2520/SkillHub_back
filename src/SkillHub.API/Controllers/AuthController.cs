@@ -16,7 +16,11 @@ public sealed class AuthController : ControllerBase
         _authService = authService;
     }
 
-    [HttpPost("register")]
+    /// <summary>
+    /// 01. Register a new participant [Public]
+    /// </summary>
+    /// <remarks>Registers a new account with the Participant role and returns a signed JWT token.</remarks>
+    [HttpPost("register", Name = "01_RegisterParticipant")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(AuthResponseDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -29,7 +33,11 @@ public sealed class AuthController : ControllerBase
         return StatusCode(StatusCodes.Status201Created, response);
     }
 
-    [HttpPost("login")]
+    /// <summary>
+    /// 02. Sign in and return JWT token [Public]
+    /// </summary>
+    /// <remarks>Authenticates an Employee (Instructor) or Participant and returns a JWT Bearer token.</remarks>
+    [HttpPost("login", Name = "02_Login")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(AuthResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

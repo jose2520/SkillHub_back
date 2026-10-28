@@ -18,6 +18,7 @@ public sealed class EnrollmentService : IEnrollmentService
     private readonly IParticipantRepository _participantRepository;
     private readonly IExcelImportService _excelImportService;
     private readonly ICertificatePdfService _certificatePdfService;
+    private readonly IEmailService _emailService;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IDateTimeProvider _dateTimeProvider;
     private readonly IValidator<CreateEnrollmentRequestDto> _createValidator;
@@ -28,6 +29,7 @@ public sealed class EnrollmentService : IEnrollmentService
         IParticipantRepository participantRepository,
         IExcelImportService excelImportService,
         ICertificatePdfService certificatePdfService,
+        IEmailService emailService,
         IUnitOfWork unitOfWork,
         IDateTimeProvider dateTimeProvider,
         IValidator<CreateEnrollmentRequestDto> createValidator)
@@ -37,6 +39,7 @@ public sealed class EnrollmentService : IEnrollmentService
         _participantRepository = participantRepository;
         _excelImportService = excelImportService;
         _certificatePdfService = certificatePdfService;
+        _emailService = emailService;
         _unitOfWork = unitOfWork;
         _dateTimeProvider = dateTimeProvider;
         _createValidator = createValidator;
@@ -65,6 +68,16 @@ public sealed class EnrollmentService : IEnrollmentService
         var nowUtc = _dateTimeProvider.UtcNow;
         var enrollment = await CreateValidatedEnrollmentCoreAsync(participant, workshop, nowUtc, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        await _emailService.SendEnrollmentConfirmationAsync(
+            participant.Email,
+            participant.FullName,
+            workshop.Title,
+            workshop.Code,
+            workshop.StartDateTime,
+            workshop.EndDateTime,
+            workshop.Instructor?.FullName ?? string.Empty,
+            cancellationToken);
 
         return BuildEnrollmentResponse(enrollment, participant, workshop);
     }
@@ -123,6 +136,7 @@ public sealed class EnrollmentService : IEnrollmentService
 
         var rows = _excelImportService.ParseEnrollmentRows(excelStream);
         var rejectedRows = new List<RejectedImportRowDto>();
+        var approvedRows = new List<ApprovedImportRowDto>();
         var enrolledCount = 0;
 
         foreach (var row in rows)
@@ -182,6 +196,10 @@ public sealed class EnrollmentService : IEnrollmentService
 
                 await _unitOfWork.SaveChangesAsync(cancellationToken);
                 enrolledCount++;
+                approvedRows.Add(new ApprovedImportRowDto(
+                    row.RowNumber,
+                    row.ParticipantEmail,
+                    row.WorkshopCode));
             }
             catch (DomainException ex)
             {
@@ -207,7 +225,8 @@ public sealed class EnrollmentService : IEnrollmentService
             EnrolledCount: enrolledCount,
             RejectedCount: rejectedRows.Count,
             TotalProcessed: rows.Count,
-            RejectedRows: rejectedRows);
+            RejectedRows: rejectedRows,
+            ApprovedRows: approvedRows);
     }
 
     public async Task<CertificateFileDto> GenerateCertificateAsync(

@@ -42,4 +42,6 @@ public interface IEnrollmentService
 public interface IReportService
 {
     Task<IReadOnlyList<TopWorkshopReportDto>> GetTopWorkshopsAsync(CancellationToken cancellationToken = default);
+    Task<ExcelFileDto> ExportTopWorkshopsExcelAsync(CancellationToken cancellationToken = default);
+    Task<ExcelFileDto> GenerateEnrollmentTemplateExcelAsync(CancellationToken cancellationToken = default);
 }

@@ -74,7 +74,9 @@ public sealed class GlobalExceptionHandlerAndSecurityTests
         AssertAuthorizeRoles(typeof(WorkshopsController), nameof(WorkshopsController.CreateWorkshop), RoleNames.Employee);
         AssertAuthorizeRoles(typeof(WorkshopsController), nameof(WorkshopsController.GetWorkshopEnrollments), RoleNames.Employee);
         AssertAuthorizeRoles(typeof(EnrollmentsController), nameof(EnrollmentsController.ImportEnrollments), RoleNames.Employee);
+        AssertAuthorizeRoles(typeof(EnrollmentsController), nameof(EnrollmentsController.DownloadImportTemplate), RoleNames.Employee);
         AssertAuthorizeRoles(typeof(ReportsController), nameof(ReportsController.GetTopWorkshops), RoleNames.Employee);
+        AssertAuthorizeRoles(typeof(ReportsController), nameof(ReportsController.ExportTopWorkshopsExcel), RoleNames.Employee);
 
         // Participant-only endpoints
         AssertAuthorizeRoles(typeof(EnrollmentsController), nameof(EnrollmentsController.CreateEnrollment), RoleNames.Participant);

@@ -20,6 +20,7 @@ public sealed class EnrollmentServiceTests
     private readonly Mock<IParticipantRepository> _participantRepo = new();
     private readonly Mock<IExcelImportService> _excelService = new();
     private readonly Mock<ICertificatePdfService> _pdfService = new();
+    private readonly Mock<IEmailService> _emailService = new();
     private readonly Mock<IUnitOfWork> _unitOfWork = new();
     private readonly Mock<IDateTimeProvider> _clock = new();
 
@@ -35,6 +36,7 @@ public sealed class EnrollmentServiceTests
             _participantRepo.Object,
             _excelService.Object,
             _pdfService.Object,
+            _emailService.Object,
             _unitOfWork.Object,
             _clock.Object,
             new CreateEnrollmentRequestValidator());
@@ -58,6 +60,43 @@ public sealed class EnrollmentServiceTests
 
         await Assert.ThrowsAsync<DuplicateEnrollmentException>(() =>
             sut.EnrollAuthenticatedParticipantAsync("user-1", new CreateEnrollmentRequestDto(workshop.Id)));
+    }
+
+    [Fact]
+    public async Task EnrollAuthenticatedParticipant_Success_DispatchesConfirmationEmail()
+    {
+        var participant = Participant.Create("user-1", "Jorge Perez", "jorge.perez@correo.com", FixedNowUtc);
+        var instructor = Instructor.Create("inst-1", "Prof. Gomez", "prof.gomez@skillhub.internal", "Bio", FixedNowUtc);
+        var workshop = Workshop.CreateNew(
+            "FOT-001", "Photography", "Basics", instructor.Id,
+            FixedNowUtc.AddDays(10), FixedNowUtc.AddDays(10).AddHours(4), 15, FixedNowUtc);
+        SetNavigationProperty(workshop, nameof(Workshop.Instructor), instructor);
+
+        _participantRepo.Setup(r => r.GetByIdentityUserIdAsync("user-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(participant);
+        _workshopRepo.Setup(r => r.GetByIdWithDetailsAsync(workshop.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(workshop);
+        _enrollmentRepo.Setup(r => r.HasActiveEnrollmentAsync(participant.Id, workshop.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        _enrollmentRepo.Setup(r => r.CountActiveByWorkshopIdAsync(workshop.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(0);
+        _enrollmentRepo.Setup(r => r.GetActiveByParticipantIdWithWorkshopAsync(participant.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<Enrollment>());
+
+        var sut = CreateSut();
+        var result = await sut.EnrollAuthenticatedParticipantAsync("user-1", new CreateEnrollmentRequestDto(workshop.Id));
+
+        Assert.NotNull(result);
+        Assert.Equal(workshop.Id, result.WorkshopId);
+        _emailService.Verify(e => e.SendEnrollmentConfirmationAsync(
+            "jorge.perez@correo.com",
+            "Jorge Perez",
+            "Photography",
+            "FOT-001",
+            workshop.StartDateTime,
+            workshop.EndDateTime,
+            "Prof. Gomez",
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
